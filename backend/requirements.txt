@@ -1,0 +1,11 @@
+# PM Atlas — backend dependencies
+#
+# Sprint 1 keeps this deliberately small: only what is needed to serve the
+# Investigation API. Later sprints will add sqlalchemy/alembic (persistence),
+# supabase (auth + storage), langgraph (agent orchestration) and the
+# OpenRouter client (LLM access).
+
+fastapi==0.115.6
+uvicorn[standard]==0.34.0
+pydantic==2.10.5
+pydantic-settings==2.7.1

@@ -1,0 +1,10 @@
+# Tooling configuration for the PM Atlas backend.
+# Dependencies stay in requirements*.txt for now; this file is config only.
+
+[tool.pytest.ini_options]
+testpaths = ["tests"]
+# `app` is importable because pytest adds the rootdir to sys.path via rootdir
+# conftest discovery; run pytest from `backend/`.
+asyncio_mode = "strict"
+asyncio_default_fixture_loop_scope = "function"
+filterwarnings = ["error::DeprecationWarning"]
