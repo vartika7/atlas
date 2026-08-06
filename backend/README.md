@@ -90,8 +90,5 @@ pytest
 
 ## Roadmap
 
-| Sprint | Work                                                        |
-| ------ | ----------------------------------------------------------- |
-| 2      | SQLAlchemy models + Alembic; swap `_store` for a repository |
-| 3      | Supabase auth; scope investigations to a user/workspace     |
-| 4      | LangGraph plan execution via OpenRouter; progress streaming |
+See the [project roadmap](../README.md#roadmap). Sprint 2 lands here first:
+SQLAlchemy models + Alembic, swapping `_store` for a repository.
