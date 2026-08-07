@@ -2,9 +2,9 @@
 
 FastAPI backend for PM Atlas, an AI Product Strategy Platform.
 
-**Sprint 1 status:** the Investigation API is scaffolded and routable. Handlers,
-schemas and the service interface are real; the orchestration and persistence
-bodies are placeholders (`TODO(sprint-2)`) backed by a process-local dict.
+The Investigation API is scaffolded and routable. Handlers, schemas and the
+service interface are real; the orchestration and persistence bodies are
+placeholders backed by a process-local dict.
 
 ## Quickstart
 
@@ -23,8 +23,7 @@ uvicorn app.main:app --reload --port 8000
 
 ## Architecture
 
-Requests flow in one direction. Each layer only knows about the one below it,
-which is what keeps the AI stack swappable later.
+Requests flow in one direction. Each layer only knows about the one below it.
 
 ```
 HTTP  ->  app/api/         routers: validate, delegate, map errors to status codes
@@ -40,7 +39,7 @@ HTTP  ->  app/api/         routers: validate, delegate, map errors to status cod
 | `app/core/config.py`           | Typed settings from env/`.env`, cached singleton              |
 | `app/api/investigations.py`    | Investigation endpoints; no business logic                    |
 | `app/schemas/investigation.py` | Request/response contract for the frontend                    |
-| `app/services/orchestrator.py` | Investigation lifecycle; future LangGraph host                |
+| `app/services/orchestrator.py` | Investigation lifecycle                                       |
 | `app/models/investigation.py`  | `Investigation` entity + `InvestigationStatus`                |
 
 Two rules worth keeping:
@@ -87,8 +86,3 @@ pytest
   advances it. `summary` and `findings` stay empty.
 - **`cancel()` and `update()` skip state-transition rules** — you can currently
   cancel an already-completed investigation.
-
-## Roadmap
-
-See the [project roadmap](../README.md#roadmap). Sprint 2 lands here first:
-SQLAlchemy models + Alembic, swapping `_store` for a repository.
