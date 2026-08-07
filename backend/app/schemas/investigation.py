@@ -24,46 +24,46 @@ from pydantic import BaseModel, ConfigDict, Field
 from app.models.investigation import InvestigationStage, InvestigationStatus
 
 
-class InvestigationBase(BaseModel):
-    """Fields a client supplies and may read back."""
+class InvestigationCreate(BaseModel):
+    """POST /investigations request body.
 
-    title: str = Field(
+    Models the product, not the implementation: a PM names a company, may
+    attach evidence, and starts the run. `title` and `question` are derived by
+    the service — a client cannot set them, because the product never asks for
+    them.
+    """
+
+    company: str = Field(
         ...,
-        min_length=3,
+        min_length=1,
         max_length=200,
-        description="Short human label for the investigation.",
-        examples=["Self-serve activation drop"],
+        description="The company to investigate.",
+        examples=["Linear"],
     )
-    question: str = Field(
-        ...,
-        min_length=10,
-        max_length=2_000,
-        description="The strategic question Atlas should investigate.",
-        examples=["Why did activation drop for self-serve signups in Q2?"],
+    uploaded_sources: dict[str, list[str]] = Field(
+        default_factory=dict,
+        description=(
+            "Optional internal evidence, keyed by source id with the filenames " "attached to it. Metadata only — file contents are not uploaded yet."
+        ),
+        examples=[{"funnel": ["q2-funnel.csv"], "events": ["events.parquet"]}],
     )
     context: str | None = Field(
         default=None,
         max_length=10_000,
         description="Optional background: metrics, prior decisions, constraints.",
     )
-    tags: list[str] = Field(
-        default_factory=list,
-        max_length=20,
-        description="Free-form labels used for filtering.",
-    )
-
-
-class InvestigationCreate(InvestigationBase):
-    """POST /investigations request body."""
 
 
 class InvestigationUpdate(BaseModel):
-    """PATCH /investigations/{id} request body — every field optional."""
+    """PATCH /investigations/{id} request body — every field optional.
 
-    title: str | None = Field(default=None, min_length=3, max_length=200)
-    question: str | None = Field(default=None, min_length=10, max_length=2_000)
+    Mirrors `InvestigationCreate`: only what the product collects is editable.
+    Changing `company` re-derives `title` and `question` in the service.
+    """
+
+    company: str | None = Field(default=None, min_length=1, max_length=200)
+    uploaded_sources: dict[str, list[str]] | None = Field(default=None)
     context: str | None = Field(default=None, max_length=10_000)
-    tags: list[str] | None = Field(default=None, max_length=20)
 
 
 # ----------------------------------------------------------------------
@@ -98,12 +98,16 @@ class ProductOpportunityRead(BaseModel):
     confidence: str = Field(description="`high`, `medium` or `low`.")
 
 
-class InvestigationRead(InvestigationBase):
+class InvestigationRead(BaseModel):
     """Single investigation as returned by the API.
 
     This is the shape clients poll while an investigation runs: `status`,
     `progress` and `current_stage` change on every request until `status`
     becomes terminal, at which point the result fields are populated.
+
+    Read-only by nature. It carries the service-derived `title`/`question`
+    alongside the client-supplied `company`, so a caller can see how Atlas
+    framed the investigation without being able to dictate it.
     """
 
     # `from_attributes` lets us build this straight from the domain object
@@ -111,6 +115,18 @@ class InvestigationRead(InvestigationBase):
     model_config = ConfigDict(from_attributes=True)
 
     id: UUID
+
+    # --- What the client supplied -----------------------------------------
+    company: str
+    uploaded_sources: dict[str, list[str]] = Field(default_factory=dict)
+    context: str | None = None
+
+    # --- How the service framed it ----------------------------------------
+    title: str
+    question: str
+    tags: list[str] = Field(default_factory=list)
+
+    # --- Lifecycle ---------------------------------------------------------
     status: InvestigationStatus
     progress: int = Field(
         default=0,

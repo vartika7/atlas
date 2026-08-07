@@ -63,13 +63,55 @@ All mounted under `/api/v1`.
 | `POST`   | `/investigations/{id}/cancel` | Cancel a run                    |
 | `DELETE` | `/investigations/{id}`        | Delete (204)                    |
 
+### Request contract
+
+The request models the product: a PM names a company and may attach evidence.
+`company` is the only required field.
+
 ```bash
 curl -X POST http://localhost:8000/api/v1/investigations \
   -H 'Content-Type: application/json' \
-  -d '{"title":"Self-serve activation drop",
-       "question":"Why did activation drop for self-serve signups in Q2?",
-       "tags":["activation","growth"]}'
+  -d '{"company":"Linear",
+       "uploaded_sources":{"funnel":["q2-funnel.csv"]},
+       "context":"Activation dipped after the Q2 pricing change."}'
 ```
+
+`uploaded_sources` is metadata only — filenames keyed by source id. File
+contents are not uploaded.
+
+The orchestration layer reasons about a titled question, so the service derives
+`title`, `question` and `tags` from the company. They are returned on the
+response but cannot be set by a client:
+
+```json
+{
+  "id": "ce7a88f7-…",
+  "company": "Linear",
+  "title": "Linear product investigation",
+  "question": "What should Linear build next, and why?",
+  "tags": ["company:linear"],
+  "status": "pending",
+  "progress": 0,
+  "current_stage": null
+}
+```
+
+### Polling
+
+`POST` returns 201 immediately at `pending`; the run proceeds in a background
+task. Poll `GET /investigations/{id}` until `status` is terminal
+(`completed`, `failed` or `cancelled`), reading `progress` (0–100) and
+`current_stage` as it advances:
+
+```
+pending → running → completed
+          discovering_sources → analyzing_evidence → generating_findings
+          → prioritizing_opportunities → generating_strategy_report
+```
+
+On completion, `evidence_sources`, `key_findings`, `product_opportunities` and
+`strategy_report` are populated. Stage cadence is `stage_duration_seconds`
+(default 2.5s, so ~12.5s end to end).
 
 ## Tests
 
@@ -80,9 +122,14 @@ pytest
 
 ## Known placeholders
 
-- **State is in-memory** (`orchestrator.py::_store`) — lost on restart.
+- **State is in-memory** (`orchestrator.py::_store`) — lost on restart, so a
+  `--reload` restart kills in-flight runs. Running uvicorn with multiple workers
+  breaks polling outright: a poll may reach a worker whose store lacks that id.
 - **No auth.** Every endpoint is public.
-- **No real orchestration.** `create()` stores the request at `pending`; nothing
-  advances it. `summary` and `findings` stay empty.
+- **Results are deterministic placeholders**, not analysis. The lifecycle is
+  real — stages, progress and failure handling all work — but no evidence is
+  gathered and no model is called. `_apply_results()` is where that lands.
 - **`cancel()` and `update()` skip state-transition rules** — you can currently
   cancel an already-completed investigation.
+- **Uploads are metadata only.** `uploaded_sources` records filenames; no file
+  content is transferred or stored.

@@ -30,11 +30,7 @@ from app.services.orchestrator import (
     get_orchestrator,
 )
 
-VALID_PAYLOAD = {
-    "title": "Self-serve activation drop",
-    "question": "Why did activation drop for self-serve signups in Q2?",
-    "tags": ["activation", "growth"],
-}
+VALID_PAYLOAD = {"company": "Linear"}
 
 MISSING_ID = "00000000-0000-0000-0000-000000000000"
 
@@ -79,7 +75,7 @@ def test_create_returns_201(client: TestClient) -> None:
     assert response.status_code == 201
 
     body = response.json()
-    assert body["title"] == VALID_PAYLOAD["title"]
+    assert body["company"] == "Linear"
     assert body["progress"] == 0
     assert body["current_stage"] is None
     assert body["error"] is None
@@ -90,12 +86,43 @@ def test_create_returns_201(client: TestClient) -> None:
     assert body["strategy_report"] is None
 
 
-def test_create_rejects_short_question(client: TestClient) -> None:
-    response = client.post(
-        "/api/v1/investigations",
-        json={"title": "abc", "question": "too short"},
+def test_create_requires_company(client: TestClient) -> None:
+    assert client.post("/api/v1/investigations", json={}).status_code == 422
+    assert (
+        client.post("/api/v1/investigations", json={"company": ""}).status_code == 422
     )
-    assert response.status_code == 422
+
+
+def test_create_derives_title_and_question_from_company(client: TestClient) -> None:
+    """The product collects a company; the service supplies the framing."""
+    body = client.post("/api/v1/investigations", json={"company": "Linear"}).json()
+
+    assert body["title"] == "Linear product investigation"
+    assert body["question"] == "What should Linear build next, and why?"
+    assert body["tags"] == ["company:linear"]
+
+
+def test_create_accepts_uploaded_sources_and_context(client: TestClient) -> None:
+    """Optional evidence metadata round-trips; file contents are not uploaded."""
+    payload = {
+        "company": "Linear",
+        "uploaded_sources": {"funnel": ["q2-funnel.csv"]},
+        "context": "Activation dipped after the Q2 pricing change.",
+    }
+    body = client.post("/api/v1/investigations", json=payload).json()
+
+    assert body["uploaded_sources"] == {"funnel": ["q2-funnel.csv"]}
+    assert body["context"] == payload["context"]
+
+
+def test_create_rejects_client_supplied_framing(client: TestClient) -> None:
+    """title/question are not part of the public request contract."""
+    body = client.post(
+        "/api/v1/investigations",
+        json={"company": "Linear", "title": "hand-written", "question": "ignored?"},
+    ).json()
+
+    assert body["title"] == "Linear product investigation"
 
 
 # ----------------------------------------------------------------------
@@ -118,7 +145,7 @@ def test_completed_investigation_has_results(client: TestClient) -> None:
     assert len(body["evidence_sources"]) == 6
     assert len(body["key_findings"]) == 3
     assert len(body["product_opportunities"]) == 3
-    assert VALID_PAYLOAD["title"] in body["strategy_report"]
+    assert "Linear product investigation" in body["strategy_report"]
 
     # Result shapes match the documented contract.
     assert set(body["evidence_sources"][0]) == {"name", "kind", "record_count"}
@@ -250,11 +277,13 @@ def test_patch_updates_only_supplied_fields(client: TestClient) -> None:
 
     patched = client.patch(
         f"/api/v1/investigations/{created['id']}",
-        json={"title": "Activation drop Q2"},
+        json={"company": "Vercel"},
     )
     assert patched.status_code == 200
-    assert patched.json()["title"] == "Activation drop Q2"
-    assert patched.json()["question"] == created["question"]
+    assert patched.json()["company"] == "Vercel"
+    # Framing is re-derived so it cannot drift from the company it describes.
+    assert patched.json()["title"] == "Vercel product investigation"
+    assert patched.json()["context"] == created["context"]
 
 
 def test_cancel_moves_to_cancelled(client: TestClient) -> None:

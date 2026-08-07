@@ -65,15 +65,30 @@ class InvestigationOrchestrator:
         scheduling `run()`, which keeps this method synchronous in effect and
         the endpoint's 201 fast.
         """
+        company = payload.company.strip()
         investigation = Investigation(
-            title=payload.title,
-            question=payload.question,
+            company=company,
+            uploaded_sources=dict(payload.uploaded_sources),
             context=payload.context,
-            tags=list(payload.tags),
             status=InvestigationStatus.PENDING,
+            **self._frame(company),
         )
         self._store[investigation.id] = investigation
         return investigation
+
+    @staticmethod
+    def _frame(company: str) -> dict[str, object]:
+        """Derive the internal framing the orchestration layer reasons about.
+
+        The product asks for a company; the stages need a titled question. That
+        translation is business logic, so it lives here rather than being
+        pushed onto clients as required request fields.
+        """
+        return {
+            "title": f"{company} product investigation",
+            "question": f"What should {company} build next, and why?",
+            "tags": [f"company:{company.lower().replace(' ', '-')}"],
+        }
 
     async def run(self, investigation_id: UUID) -> None:
         """Execute the investigation, publishing progress as it goes.
@@ -139,9 +154,19 @@ class InvestigationOrchestrator:
             failed.touch()
 
     async def update(self, investigation_id: UUID, payload: InvestigationUpdate) -> Investigation:
-        """Patch the editable fields of an existing investigation."""
+        """Patch the editable fields of an existing investigation.
+
+        Renaming the company re-derives the framing, so `title` and `question`
+        can never drift out of sync with the company they describe.
+        """
         investigation = await self.get(investigation_id)
-        for field_name, value in payload.model_dump(exclude_unset=True).items():
+
+        changes = payload.model_dump(exclude_unset=True)
+        if (company := changes.get("company")) is not None:
+            changes["company"] = company = company.strip()
+            changes.update(self._frame(company))
+
+        for field_name, value in changes.items():
             setattr(investigation, field_name, value)
         investigation.touch()
         return investigation

@@ -117,10 +117,16 @@ class Investigation:
     # --- Identity ---------------------------------------------------------
     id: UUID = field(default_factory=uuid4)
 
-    # --- Input (what the PM asked) ----------------------------------------
+    # --- Input (what the product collects) --------------------------------
+    company: str = ""
+    uploaded_sources: dict[str, list[str]] = field(default_factory=dict)
+    context: str | None = None
+
+    # --- Derived framing (set by the service, never by a client) ----------
+    # The orchestration layer reasons in terms of a titled question, but that
+    # is an implementation detail: clients supply a company and read these back.
     title: str = ""
     question: str = ""
-    context: str | None = None
     tags: list[str] = field(default_factory=list)
 
     # --- Execution state --------------------------------------------------
