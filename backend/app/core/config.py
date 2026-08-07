@@ -13,6 +13,7 @@ Adding a setting = add a typed field here, document it in `env.example`.
 from functools import lru_cache
 from typing import Literal
 
+from pydantic import Field
 from pydantic_settings import BaseSettings, SettingsConfigDict
 
 
@@ -39,11 +40,19 @@ class Settings(BaseSettings):
     debug: bool = True
 
     # --- CORS -------------------------------------------------------------
-    # The React frontend's origins (Vite dev server + CRA/Next default).
+    # The React frontend's origins. :8080 is what the TanStack Start dev server
+    # actually serves on; the other two are conventional Vite/Next defaults.
     cors_origins: list[str] = [
+        "http://localhost:8080",
         "http://localhost:5173",
         "http://localhost:3000",
     ]
+
+    # --- Investigation lifecycle ------------------------------------------
+    # Wall-clock seconds spent on each stage of a simulated investigation run.
+    # Settable so tests can drive a full lifecycle to completion instantly
+    # instead of waiting out the real cadence.
+    stage_duration_seconds: float = Field(default=2.5, ge=0.0)
 
     # --- Placeholders for later sprints -----------------------------------
     # Left as Optional so the app boots with none of them configured.

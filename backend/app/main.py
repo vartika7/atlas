@@ -16,6 +16,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.api import investigations
+from app.api.errors import register_exception_handlers
 from app.core.config import Settings, get_settings
 
 
@@ -56,6 +57,9 @@ def create_app(settings: Settings | None = None) -> FastAPI:
         allow_methods=["*"],
         allow_headers=["*"],
     )
+
+    # Domain errors become HTTP responses in one place, not per handler.
+    register_exception_handlers(app)
 
     # Every resource router is mounted under the versioned prefix.
     app.include_router(investigations.router, prefix=settings.api_v1_prefix)

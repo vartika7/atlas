@@ -2,11 +2,11 @@
 
 Responsibility
 --------------
-Defines the *public contract* between the React frontend and the backend:
-what a request must look like, what a response is guaranteed to contain.
+Defines the *public contract* between clients and the backend: what a request
+must look like, what a response is guaranteed to contain.
 
 Kept separate from `app/models/investigation.py` on purpose — the domain model
-can change (new columns, internal fields) without silently changing the API, and
+can change (new fields, internal state) without silently changing the API, and
 internal fields never leak to clients by accident.
 
 Naming convention:
@@ -21,7 +21,7 @@ from uuid import UUID
 
 from pydantic import BaseModel, ConfigDict, Field
 
-from app.models.investigation import InvestigationStatus
+from app.models.investigation import InvestigationStage, InvestigationStatus
 
 
 class InvestigationBase(BaseModel):
@@ -66,8 +66,45 @@ class InvestigationUpdate(BaseModel):
     tags: list[str] | None = Field(default=None, max_length=20)
 
 
+# ----------------------------------------------------------------------
+# Result payloads
+# ----------------------------------------------------------------------
+# Mirrors of the domain dataclasses. Duplicated deliberately: the domain model
+# is free to gain internal fields without those appearing in API responses.
+
+
+class EvidenceSourceRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    name: str
+    kind: str = Field(description="`public` or `internal`.")
+    record_count: int
+
+
+class KeyFindingRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    title: str
+    detail: str
+    confidence: str = Field(description="`high`, `medium` or `low`.")
+
+
+class ProductOpportunityRead(BaseModel):
+    model_config = ConfigDict(from_attributes=True)
+
+    title: str
+    rationale: str
+    impact: str = Field(description="`high`, `medium` or `low`.")
+    confidence: str = Field(description="`high`, `medium` or `low`.")
+
+
 class InvestigationRead(InvestigationBase):
-    """Single investigation as returned by the API."""
+    """Single investigation as returned by the API.
+
+    This is the shape clients poll while an investigation runs: `status`,
+    `progress` and `current_stage` change on every request until `status`
+    becomes terminal, at which point the result fields are populated.
+    """
 
     # `from_attributes` lets us build this straight from the domain object
     # (dataclass now, SQLAlchemy row later) via `model_validate(obj)`.
@@ -75,15 +112,27 @@ class InvestigationRead(InvestigationBase):
 
     id: UUID
     status: InvestigationStatus
-    error: str | None = None
-    summary: str | None = Field(
+    progress: int = Field(
+        default=0,
+        ge=0,
+        le=100,
+        description="Percentage complete, 0–100.",
+    )
+    current_stage: InvestigationStage | None = Field(
         default=None,
-        description="Executive summary. Null until the investigation completes.",
+        description="Stage in flight. Null before the run starts and once it ends.",
     )
-    findings: list[str] = Field(
-        default_factory=list,
-        description="Evidence-backed findings. Empty until the run completes.",
+    error: str | None = Field(
+        default=None,
+        description="Failure reason. Only set when status is `failed`.",
     )
+
+    # --- Results: empty until status is `completed` -----------------------
+    evidence_sources: list[EvidenceSourceRead] = Field(default_factory=list)
+    key_findings: list[KeyFindingRead] = Field(default_factory=list)
+    product_opportunities: list[ProductOpportunityRead] = Field(default_factory=list)
+    strategy_report: str | None = None
+
     created_at: datetime
     updated_at: datetime
 
